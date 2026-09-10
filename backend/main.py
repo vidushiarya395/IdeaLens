@@ -70,8 +70,9 @@ MISSING_KEY_HINT = (
     "get one free at https://aistudio.google.com/apikey"
 )
 GEMINI_KEY_HINT = (
-    "That doesn't look like a Google Gemini API key. Keys start with 'AIza' — "
-    "get one free at https://aistudio.google.com/apikey"
+    "That doesn't look like a Google Gemini API key. AI Studio keys start with "
+    "'AQ.' (older ones start with 'AIza') — get one free at "
+    "https://aistudio.google.com/apikey"
 )
 
 
@@ -82,6 +83,8 @@ class IdeaRequest(BaseModel):
     # each analysis makes 6 Gemini calls that run entirely on the caller's quota.
     # It has to be a Gemini key because every agent talks to Google via
     # google-genai; another provider's key passes Pydantic but fails at call time.
+    # Google AI Studio now issues "auth keys" prefixed "AQ." — older "standard"
+    # keys are prefixed "AIza" and are being retired through 2026.
     api_key: str | None = Field(default=None, validate_default=True)
 
     @field_validator("api_key", mode="before")
@@ -90,7 +93,7 @@ class IdeaRequest(BaseModel):
         v = str(v or "").strip()
         if not v:
             raise ValueError(MISSING_KEY_HINT)
-        if not v.startswith("AIza") or len(v) < 30:
+        if not (v.startswith("AQ.") or v.startswith("AIza")) or len(v) < 20:
             raise ValueError(GEMINI_KEY_HINT)
         return v
 

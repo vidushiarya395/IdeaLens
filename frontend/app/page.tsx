@@ -628,7 +628,7 @@ export default function Home() {
                   type="password"
                   value={userApiKey}
                   onChange={e => setUserApiKey(e.target.value)}
-                  placeholder="AIza..."
+                  placeholder="AQ.Ab... (or older AIza... key)"
                   style={{
                     width: "100%", boxSizing: "border-box",
                     padding: "10px 14px", borderRadius: 8,
