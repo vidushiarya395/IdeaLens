@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from dotenv import load_dotenv
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -65,6 +65,10 @@ async def validation_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(status_code=422, content={"error": msg.replace("Value error, ", "")})
 
 
+MISSING_KEY_HINT = (
+    "A Gemini API key is required. Paste yours in the field above — "
+    "get one free at https://aistudio.google.com/apikey"
+)
 GEMINI_KEY_HINT = (
     "That doesn't look like a Google Gemini API key. Keys start with 'AIza' — "
     "get one free at https://aistudio.google.com/apikey"
@@ -73,19 +77,19 @@ GEMINI_KEY_HINT = (
 
 class IdeaRequest(BaseModel):
     idea: str
-    # Bring-your-own-key: must be a Google Gemini (AI Studio) key, since every
-    # agent talks to Google's API via google-genai. Any other provider's key
-    # would only fail later at request time.
-    api_key: str | None = None
+    # Bring-your-own-key: every request must carry the caller's own Google
+    # Gemini (AI Studio) key. There is no shared server key for public traffic —
+    # each analysis makes 6 Gemini calls that run entirely on the caller's quota.
+    # It has to be a Gemini key because every agent talks to Google via
+    # google-genai; another provider's key passes Pydantic but fails at call time.
+    api_key: str | None = Field(default=None, validate_default=True)
 
     @field_validator("api_key", mode="before")
     @classmethod
-    def _clean_api_key(cls, v):
-        if v is None:
-            return None
-        v = str(v).strip()
+    def _require_gemini_key(cls, v):
+        v = str(v or "").strip()
         if not v:
-            return None
+            raise ValueError(MISSING_KEY_HINT)
         if not v.startswith("AIza") or len(v) < 30:
             raise ValueError(GEMINI_KEY_HINT)
         return v

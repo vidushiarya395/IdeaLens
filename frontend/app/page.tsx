@@ -277,12 +277,12 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   const [focused, setFocused] = useState(false);
   const [userApiKey, setUserApiKey] = useState("");
-  const [showKeyInput, setShowKeyInput] = useState(false);
   const progressRef = useRef(null);
 
   const isIdle = phase === "idle";
   const isRunning = phase === "running";
   const isDone = phase === "done";
+  const hasKey = userApiKey.trim().length > 0;
   const completedCount = Object.values(statuses).filter(s => s === "done").length;
   const currentAgent = AGENTS.find(a => statuses[a.key] === "running");
 
@@ -317,6 +317,10 @@ export default function Home() {
 
   const handleSubmit = async () => {
     if (!idea.trim() || isRunning) return;
+    if (!hasKey) {
+      setError("A Gemini API key is required. Paste yours below — get one free at https://aistudio.google.com/apikey");
+      return;
+    }
     setPhase("running");
     setResults({});
     setActive(null);
@@ -331,7 +335,7 @@ export default function Home() {
       const res = await fetch(`${BACKEND}/generate-spec-stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idea, api_key: userApiKey.trim() || null }),
+        body: JSON.stringify({ idea, api_key: userApiKey.trim() }),
       });
 
       if (!res.ok) {
@@ -605,48 +609,37 @@ export default function Home() {
             </div>
 
             {isIdle && (
-              <div style={{ marginTop: 10 }}>
-                <button
-                  onClick={() => setShowKeyInput(!showKeyInput)}
-                  style={{
-                    background: "none", border: "none", cursor: "pointer",
-                    color: "#475569", fontSize: 11, fontFamily: "monospace",
-                    padding: 0, display: "flex", alignItems: "center", gap: 6
-                  }}
-                >
-                  <span style={{ color: userApiKey ? "#4ade80" : "#475569" }}>
-                    {userApiKey ? "● Using your own API key" : "○ Use your own Gemini API key"}
+              <div style={{ marginTop: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, fontFamily: "monospace", color: hasKey ? "#4ade80" : "#94a3b8" }}>
+                    {hasKey ? "● Gemini API key set" : "Gemini API key"}
+                    <span style={{ color: "#f87171" }}> *</span>
                   </span>
-                  <span style={{ fontSize: 9 }}>{showKeyInput ? "▲" : "▼"}</span>
-                </button>
-
-                {showKeyInput && (
-                  <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center" }}>
-                    <input
-                      type="password"
-                      value={userApiKey}
-                      onChange={e => setUserApiKey(e.target.value)}
-                      placeholder="Paste your Gemini API key (optional)"
-                      style={{
-                        flex: 1, padding: "10px 14px", borderRadius: 8,
-                        background: "#08081a", border: "1px solid #1a1a2e",
-                        color: "#e2e8f0", fontSize: 12, fontFamily: "monospace",
-                        outline: "none"
-                      }}
-                    />
-
-                    <a
-                      href="https://aistudio.google.com/apikey"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ fontSize: 10, color: ACCENT, whiteSpace: "nowrap", fontFamily: "monospace" }}
-                    >
-                      Get a free key ↗
-                    </a>
-                  </div>
-                )}
+                  <a
+                    href="https://aistudio.google.com/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: 10, color: ACCENT, whiteSpace: "nowrap", fontFamily: "monospace" }}
+                  >
+                    Get a free key ↗
+                  </a>
+                </div>
+                <input
+                  type="password"
+                  value={userApiKey}
+                  onChange={e => setUserApiKey(e.target.value)}
+                  placeholder="AIza..."
+                  style={{
+                    width: "100%", boxSizing: "border-box",
+                    padding: "10px 14px", borderRadius: 8,
+                    background: "#08081a",
+                    border: `1px solid ${hasKey ? "#1a1a2e" : "#3f2530"}`,
+                    color: "#e2e8f0", fontSize: 12, fontFamily: "monospace",
+                    outline: "none"
+                  }}
+                />
                 <p style={{ fontSize: 10, color: "#334155", marginTop: 6, lineHeight: 1.5 }}>
-                  Optional — without a key, you're limited by the site owner's shared quota. Your key is never stored or sent anywhere except directly to Google's API for this request.
+                  Required — each analysis makes 6 Gemini calls that run entirely on your key's own quota. Your key is sent only to Google for this request and is never stored.
                 </p>
               </div>
             )}
@@ -673,14 +666,14 @@ export default function Home() {
                 New Analysis →
               </button>
             ) : (
-              <button onClick={handleSubmit} disabled={isRunning || !idea.trim()} style={{
+              <button onClick={handleSubmit} disabled={isRunning || !idea.trim() || !hasKey} style={{
                 padding: "8px 22px",
-                background: (isRunning || !idea.trim()) ? "#0a0a14" : `linear-gradient(135deg,#4338ca,#6d28d9)`,
-                border: "1px solid", borderColor: (isRunning || !idea.trim()) ? "#1a1a2e" : "#5b4dcc",
-                borderRadius: 8, color: (isRunning || !idea.trim()) ? "#334155" : "#fff",
-                fontSize: 12, fontWeight: 600, cursor: (isRunning || !idea.trim()) ? "not-allowed" : "pointer",
+                background: (isRunning || !idea.trim() || !hasKey) ? "#0a0a14" : `linear-gradient(135deg,#4338ca,#6d28d9)`,
+                border: "1px solid", borderColor: (isRunning || !idea.trim() || !hasKey) ? "#1a1a2e" : "#5b4dcc",
+                borderRadius: 8, color: (isRunning || !idea.trim() || !hasKey) ? "#334155" : "#fff",
+                fontSize: 12, fontWeight: 600, cursor: (isRunning || !idea.trim() || !hasKey) ? "not-allowed" : "pointer",
                 fontFamily: "Inter, sans-serif", display: "inline-flex", alignItems: "center", gap: 8,
-                boxShadow: (isRunning || !idea.trim()) ? "none" : `0 0 20px ${ACCENT}28`,
+                boxShadow: (isRunning || !idea.trim() || !hasKey) ? "none" : `0 0 20px ${ACCENT}28`,
                 transition: "all 0.2s"
               }}>
                 {isRunning ? (

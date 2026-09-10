@@ -32,6 +32,10 @@ You describe a product idea in one message. Six AI agents analyze it in sequence
 
 The final report can be downloaded as a standalone HTML file with a print-to-PDF button.
 
+Every analysis runs on **your own** Google Gemini API key — you paste it into the app (it's
+sent only to Google and never stored). A free key from [AI Studio](https://aistudio.google.com/apikey)
+is enough. There is no shared server key.
+
 ---
 
 ## Tech stack
@@ -96,7 +100,7 @@ Create `backend/.env`:
 
 | Variable | Description |
 |---|---|
-| `GEMINI_API_KEY` | Google Gemini API key |
+| `GEMINI_API_KEY` | Only used by the local test scripts (`test_*.py`). The API itself takes the key per-request from the client. |
 | `SUPABASE_URL` | Your Supabase project URL |
 | `SUPABASE_SERVICE_KEY` | Supabase service role key |
 
@@ -132,6 +136,7 @@ App runs at `http://localhost:3000`.
 
 ## Known limitations
 
+- You must supply your own Gemini API key for every analysis — nothing runs on a shared key
 - Rate limited to 3 spec generations per hour per IP
-- Gemini's free tier has daily/per-minute quotas — heavy use may hit `429` errors
+- Gemini's free tier has daily/per-minute quotas — heavy use on one key may hit `429` errors
 - Render's free tier sleeps after ~15 min idle; the next request takes 30-60s to wake up and rebuilds the RAG vector store from scratch on that cold start

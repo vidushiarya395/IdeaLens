@@ -153,9 +153,9 @@ def orchestrator_node(state: SpecForgeState) -> SpecForgeState:
     state["final_spec"] = None
 
     try:
-        api_key = state.get("api_key") or os.getenv("GEMINI_API_KEY")
+        api_key = state.get("api_key")
         if not api_key:
-            raise EnvironmentError("No API key available. Please provide your own Gemini API key or contact the site owner.")
+            raise EnvironmentError("No Gemini API key provided for this request")
 
         client = genai.Client(api_key=api_key)
 
