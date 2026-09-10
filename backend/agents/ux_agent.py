@@ -115,9 +115,9 @@ def ux_node(state: SpecForgeState) -> SpecForgeState:
     state["ux_concerns"] = None
 
     try:
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = state.get("api_key") or os.getenv("GEMINI_API_KEY")
         if not api_key:
-            raise EnvironmentError("GEMINI_API_KEY not found")
+            raise EnvironmentError("No API key available. Please provide your own Gemini API key or contact the site owner.")
 
         client = genai.Client(api_key=api_key)
 

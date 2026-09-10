@@ -4,6 +4,7 @@ class SpecForgeState(TypedDict, total=False):
 
     # Input
     idea: str
+    api_key: Optional[str]
 
     # Business Agent
     business_analysis: Optional[Dict[str, Any]]

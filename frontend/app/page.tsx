@@ -276,6 +276,8 @@ export default function Home() {
   const [error, setError] = useState(null);
   const [progress, setProgress] = useState(0);
   const [focused, setFocused] = useState(false);
+  const [userApiKey, setUserApiKey] = useState("");
+  const [showKeyInput, setShowKeyInput] = useState(false);
   const progressRef = useRef(null);
 
   const isIdle = phase === "idle";
@@ -329,10 +331,17 @@ export default function Home() {
       const res = await fetch(`${BACKEND}/generate-spec-stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idea }),
+        body: JSON.stringify({ idea, api_key: userApiKey.trim() || null }),
       });
 
-      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+      if (!res.ok) {
+        let msg = `Server error: ${res.status}`;
+        try {
+          const body = await res.json();
+          msg = body.error || (typeof body.detail === "string" ? body.detail : msg);
+        } catch { /* non-JSON body */ }
+        throw new Error(msg);
+      }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -595,292 +604,339 @@ export default function Home() {
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
-              {isDone && (
-                <button onClick={() => downloadReport(idea, results)} style={{
-                  padding: "8px 16px", background: "#04081a",
-                  border: "1px solid #1e3a5f", color: "#60a5fa",
-                  borderRadius: 8, cursor: "pointer", fontSize: 11,
-                  fontFamily: "Inter, sans-serif",
-                  display: "inline-flex", alignItems: "center", gap: 6
-                }}>
-                  ↓ Download Report
-                </button>
-              )}
-              {isDone ? (
-                <button onClick={handleReset} style={{
-                  padding: "8px 20px", background: "transparent",
-                  border: `1px solid ${ACCENT}30`, color: ACCENT,
-                  borderRadius: 8, cursor: "pointer", fontSize: 11,
-                  fontFamily: "Inter, sans-serif"
-                }}>
-                  New Analysis →
-                </button>
-              ) : (
-                <button onClick={handleSubmit} disabled={isRunning || !idea.trim()} style={{
-                  padding: "8px 22px",
-                  background: (isRunning || !idea.trim()) ? "#0a0a14" : `linear-gradient(135deg,#4338ca,#6d28d9)`,
-                  border: "1px solid", borderColor: (isRunning || !idea.trim()) ? "#1a1a2e" : "#5b4dcc",
-                  borderRadius: 8, color: (isRunning || !idea.trim()) ? "#334155" : "#fff",
-                  fontSize: 12, fontWeight: 600, cursor: (isRunning || !idea.trim()) ? "not-allowed" : "pointer",
-                  fontFamily: "Inter, sans-serif", display: "inline-flex", alignItems: "center", gap: 8,
-                  boxShadow: (isRunning || !idea.trim()) ? "none" : `0 0 20px ${ACCENT}28`,
-                  transition: "all 0.2s"
-                }}>
-                  {isRunning ? (
-                    <>
-                      <span style={{ width: 10, height: 10, borderRadius: "50%", border: `2px solid ${ACCENT}40`, borderTopColor: ACCENT, animation: "spin 0.7s linear infinite", display: "inline-block" }} />
-                      Analysing...
-                    </>
-                  ) : "Generate Spec →"}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Error */}
-          {error && (
-            <div style={{
-              marginBottom: 16, padding: "12px 16px",
-              background: "#0f0008", border: "1px solid #7f1d1d",
-              borderRadius: 10, display: "flex", gap: 10, alignItems: "flex-start"
-            }}>
-              <span style={{ color: "#f87171", fontSize: 14 }}>⚠</span>
-              <span style={{ fontSize: 12, color: "#fca5a5", lineHeight: 1.5 }}>{error}</span>
-              <button onClick={() => setError(null)} style={{ marginLeft: "auto", background: "none", border: "none", color: "#7f1d1d", cursor: "pointer", fontSize: 16 }}>×</button>
-            </div>
-          )}
-
-          {/* Pipeline + Results */}
-          {!isIdle && (
-            <div className="fade-in">
-              {/* Agent pipeline strip */}
-              <div style={{
-                marginBottom: 16, padding: "16px 20px",
-                background: "#07070f", border: "1px solid #0f0f1c", borderRadius: 10
-              }}>
-                <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
-                  <span style={{ fontSize: 9, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.14em", fontFamily: "monospace" }}>
-                    Agent Pipeline
+            {isIdle && (
+              <div style={{ marginTop: 10 }}>
+                <button
+                  onClick={() => setShowKeyInput(!showKeyInput)}
+                  style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    color: "#475569", fontSize: 11, fontFamily: "monospace",
+                    padding: 0, display: "flex", alignItems: "center", gap: 6
+                  }}
+                >
+                  <span style={{ color: userApiKey ? "#4ade80" : "#475569" }}>
+                    {userApiKey ? "● Using your own API key" : "○ Use your own Gemini API key"}
                   </span>
-                  <div style={{ flex: 1, height: 1, background: "#0f0f1c", margin: "0 10px" }} />
-                  <span style={{ fontSize: 10, color: "#475569", fontFamily: "monospace" }}>{completedCount}/6</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center" }}>
-                  {AGENTS.map((agent, i) => {
-                    const s = statuses[agent.key];
-                    const isRun = s === "running";
-                    const isDn = s === "done";
-                    return (
-                      <div key={agent.key} style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0 }}>
-                        <button onClick={() => isDn && setActive(agent.key)} style={{
-                          display: "flex", flexDirection: "column", alignItems: "center",
-                          gap: 4, flex: 1, padding: "2px", border: "none",
-                          background: "transparent", cursor: isDn ? "pointer" : "default"
-                        }}>
-                          <div style={{ position: "relative" }}>
-                            {isRun && (
-                              <div style={{
-                                position: "absolute", inset: -4, borderRadius: "50%",
-                                border: `1px solid ${ACCENT}30`,
-                                animation: "pulseRing 2s ease infinite"
-                              }} />
-                            )}
+                  <span style={{ fontSize: 9 }}>{showKeyInput ? "▲" : "▼"}</span>
+                </button>
+
+                {showKeyInput && (
+                  <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center" }}>
+                    <input
+                      type="password"
+                      value={userApiKey}
+                      onChange={e => setUserApiKey(e.target.value)}
+                      placeholder="Paste your Gemini API key (optional)"
+                      style={{
+                        flex: 1, padding: "10px 14px", borderRadius: 8,
+                        background: "#08081a", border: "1px solid #1a1a2e",
+                        color: "#e2e8f0", fontSize: 12, fontFamily: "monospace",
+                        outline: "none"
+                      }}
+                    />
+
+                    <a
+                      href="https://aistudio.google.com/apikey"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontSize: 10, color: ACCENT, whiteSpace: "nowrap", fontFamily: "monospace" }}
+                    >
+                      Get a free key ↗
+                    </a>
+                  </div>
+                )}
+                <p style={{ fontSize: 10, color: "#334155", marginTop: 6, lineHeight: 1.5 }}>
+                  Optional — without a key, you're limited by the site owner's shared quota. Your key is never stored or sent anywhere except directly to Google's API for this request.
+                </p>
+              </div>
+            )}
+
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+            {isDone && (
+              <button onClick={() => downloadReport(idea, results)} style={{
+                padding: "8px 16px", background: "#04081a",
+                border: "1px solid #1e3a5f", color: "#60a5fa",
+                borderRadius: 8, cursor: "pointer", fontSize: 11,
+                fontFamily: "Inter, sans-serif",
+                display: "inline-flex", alignItems: "center", gap: 6
+              }}>
+                ↓ Download Report
+              </button>
+            )}
+            {isDone ? (
+              <button onClick={handleReset} style={{
+                padding: "8px 20px", background: "transparent",
+                border: `1px solid ${ACCENT}30`, color: ACCENT,
+                borderRadius: 8, cursor: "pointer", fontSize: 11,
+                fontFamily: "Inter, sans-serif"
+              }}>
+                New Analysis →
+              </button>
+            ) : (
+              <button onClick={handleSubmit} disabled={isRunning || !idea.trim()} style={{
+                padding: "8px 22px",
+                background: (isRunning || !idea.trim()) ? "#0a0a14" : `linear-gradient(135deg,#4338ca,#6d28d9)`,
+                border: "1px solid", borderColor: (isRunning || !idea.trim()) ? "#1a1a2e" : "#5b4dcc",
+                borderRadius: 8, color: (isRunning || !idea.trim()) ? "#334155" : "#fff",
+                fontSize: 12, fontWeight: 600, cursor: (isRunning || !idea.trim()) ? "not-allowed" : "pointer",
+                fontFamily: "Inter, sans-serif", display: "inline-flex", alignItems: "center", gap: 8,
+                boxShadow: (isRunning || !idea.trim()) ? "none" : `0 0 20px ${ACCENT}28`,
+                transition: "all 0.2s"
+              }}>
+                {isRunning ? (
+                  <>
+                    <span style={{ width: 10, height: 10, borderRadius: "50%", border: `2px solid ${ACCENT}40`, borderTopColor: ACCENT, animation: "spin 0.7s linear infinite", display: "inline-block" }} />
+                    Analysing...
+                  </>
+                ) : "Generate Spec →"}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div style={{
+            marginBottom: 16, padding: "12px 16px",
+            background: "#0f0008", border: "1px solid #7f1d1d",
+            borderRadius: 10, display: "flex", gap: 10, alignItems: "flex-start"
+          }}>
+            <span style={{ color: "#f87171", fontSize: 14 }}>⚠</span>
+            <span style={{ fontSize: 12, color: "#fca5a5", lineHeight: 1.5 }}>{error}</span>
+            <button onClick={() => setError(null)} style={{ marginLeft: "auto", background: "none", border: "none", color: "#7f1d1d", cursor: "pointer", fontSize: 16 }}>×</button>
+          </div>
+        )}
+
+        {/* Pipeline + Results */}
+        {!isIdle && (
+          <div className="fade-in">
+            {/* Agent pipeline strip */}
+            <div style={{
+              marginBottom: 16, padding: "16px 20px",
+              background: "#07070f", border: "1px solid #0f0f1c", borderRadius: 10
+            }}>
+              <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
+                <span style={{ fontSize: 9, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.14em", fontFamily: "monospace" }}>
+                  Agent Pipeline
+                </span>
+                <div style={{ flex: 1, height: 1, background: "#0f0f1c", margin: "0 10px" }} />
+                <span style={{ fontSize: 10, color: "#475569", fontFamily: "monospace" }}>{completedCount}/6</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center" }}>
+                {AGENTS.map((agent, i) => {
+                  const s = statuses[agent.key];
+                  const isRun = s === "running";
+                  const isDn = s === "done";
+                  return (
+                    <div key={agent.key} style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0 }}>
+                      <button onClick={() => isDn && setActive(agent.key)} style={{
+                        display: "flex", flexDirection: "column", alignItems: "center",
+                        gap: 4, flex: 1, padding: "2px", border: "none",
+                        background: "transparent", cursor: isDn ? "pointer" : "default"
+                      }}>
+                        <div style={{ position: "relative" }}>
+                          {isRun && (
                             <div style={{
-                              width: 34, height: 34, borderRadius: "50%",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              background: isDn ? `${ACCENT}14` : isRun ? "#100c28" : "#07070f",
-                              border: `2px solid ${isDn ? ACCENT : isRun ? ACCENT : "#1a1a2e"}`,
-                              transition: "all 0.4s cubic-bezier(.22,1,.36,1)",
-                              boxShadow: isDn ? `0 0 12px ${ACCENT}40` : isRun ? `0 0 10px ${ACCENT}30` : "none",
-                            }}>
-                              {isDn
-                                ? <span style={{ color: ACCENT, fontSize: 12, fontWeight: 700 }}>✓</span>
-                                : isRun
-                                  ? <span style={{ width: 6, height: 6, borderRadius: "50%", background: ACCENT, display: "block", animation: "pulseGlow 1s ease infinite" }} />
-                                  : <span style={{ color: "#1e2035", fontSize: 9, fontWeight: 600, fontFamily: "monospace" }}>{i + 1}</span>
-                              }
-                            </div>
-                          </div>
-                          <span style={{
-                            fontSize: 8, fontWeight: 600, fontFamily: "monospace",
-                            letterSpacing: "0.05em",
-                            color: isDn ? ACCENT : isRun ? ACCENT : "#1e2035",
-                            transition: "color 0.3s", whiteSpace: "nowrap"
-                          }}>{agent.short}</span>
-                        </button>
-                        {i < AGENTS.length - 1 && (
+                              position: "absolute", inset: -4, borderRadius: "50%",
+                              border: `1px solid ${ACCENT}30`,
+                              animation: "pulseRing 2s ease infinite"
+                            }} />
+                          )}
                           <div style={{
-                            flex: "0 0 12px", height: 1,
-                            background: isDn ? `${ACCENT}40` : "#0f0f1c",
-                            transition: "background 0.5s ease"
+                            width: 34, height: 34, borderRadius: "50%",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            background: isDn ? `${ACCENT}14` : isRun ? "#100c28" : "#07070f",
+                            border: `2px solid ${isDn ? ACCENT : isRun ? ACCENT : "#1a1a2e"}`,
+                            transition: "all 0.4s cubic-bezier(.22,1,.36,1)",
+                            boxShadow: isDn ? `0 0 12px ${ACCENT}40` : isRun ? `0 0 10px ${ACCENT}30` : "none",
+                          }}>
+                            {isDn
+                              ? <span style={{ color: ACCENT, fontSize: 12, fontWeight: 700 }}>✓</span>
+                              : isRun
+                                ? <span style={{ width: 6, height: 6, borderRadius: "50%", background: ACCENT, display: "block", animation: "pulseGlow 1s ease infinite" }} />
+                                : <span style={{ color: "#1e2035", fontSize: 9, fontWeight: 600, fontFamily: "monospace" }}>{i + 1}</span>
+                            }
+                          </div>
+                        </div>
+                        <span style={{
+                          fontSize: 8, fontWeight: 600, fontFamily: "monospace",
+                          letterSpacing: "0.05em",
+                          color: isDn ? ACCENT : isRun ? ACCENT : "#1e2035",
+                          transition: "color 0.3s", whiteSpace: "nowrap"
+                        }}>{agent.short}</span>
+                      </button>
+                      {i < AGENTS.length - 1 && (
+                        <div style={{
+                          flex: "0 0 12px", height: 1,
+                          background: isDn ? `${ACCENT}40` : "#0f0f1c",
+                          transition: "background 0.5s ease"
+                        }} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Sidebar + main panel */}
+            {Object.keys(results).length > 0 && (
+              <div className="results-grid" style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 12, marginBottom: 32 }}>
+                {/* Sidebar */}
+                <div style={{
+                  background: "#07070f", border: "1px solid #0f0f1c",
+                  borderRadius: 10, overflow: "hidden",
+                  position: "sticky", top: 68, height: "fit-content"
+                }}>
+                  <div style={{
+                    padding: "10px 14px", borderBottom: "1px solid #0f0f1c",
+                    display: "flex", justifyContent: "space-between", alignItems: "center"
+                  }}>
+                    <span style={{ fontSize: 9, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.14em", fontFamily: "monospace" }}>
+                      Agents
+                    </span>
+                    <span style={{ fontSize: 10, color: "#475569", fontFamily: "monospace" }}>
+                      {Object.keys(results).length}/{AGENTS.length}
+                    </span>
+                  </div>
+                  {AGENTS.filter(a => results[a.key]).map(agent => {
+                    const result = results[agent.key];
+                    const verdict = result?.verdict || result?.project_viability;
+                    const isActive = active === agent.key;
+                    const vc = VERDICTS[verdict?.toLowerCase()] || VERDICTS.unclear;
+                    return (
+                      <button key={agent.key}
+                        className={`agent-btn${isActive ? " active" : ""}`}
+                        onClick={() => setActive(agent.key)}
+                        style={{ borderLeftColor: isActive ? ACCENT : "transparent" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
+                          <span style={{
+                            width: 6, height: 6, borderRadius: "50%", background: ACCENT, flexShrink: 0,
+                            boxShadow: isActive ? `0 0 8px ${ACCENT}` : "none", transition: "box-shadow 0.2s"
                           }} />
+                          <span style={{ fontSize: 12, fontWeight: 500, color: isActive ? "#e2e8f0" : "#64748b", transition: "color 0.15s" }}>
+                            {agent.label}
+                          </span>
+                        </div>
+                        {verdict && (
+                          <div style={{ marginLeft: 13 }}>
+                            <span style={{
+                              display: "inline-flex", alignItems: "center", gap: 4,
+                              fontSize: 8, padding: "2px 8px", borderRadius: 999,
+                              background: vc.bg, border: `1px solid ${vc.border}`,
+                              color: vc.color, fontWeight: 700, letterSpacing: "0.08em",
+                              textTransform: "uppercase"
+                            }}>
+                              <span style={{ width: 3, height: 3, borderRadius: "50%", background: vc.color }} />
+                              {vc.label}
+                            </span>
+                          </div>
                         )}
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
-              </div>
 
-              {/* Sidebar + main panel */}
-              {Object.keys(results).length > 0 && (
-                <div className="results-grid" style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 12, marginBottom: 32 }}>
-                  {/* Sidebar */}
-                  <div style={{
-                    background: "#07070f", border: "1px solid #0f0f1c",
-                    borderRadius: 10, overflow: "hidden",
-                    position: "sticky", top: 68, height: "fit-content"
-                  }}>
-                    <div style={{
-                      padding: "10px 14px", borderBottom: "1px solid #0f0f1c",
-                      display: "flex", justifyContent: "space-between", alignItems: "center"
-                    }}>
-                      <span style={{ fontSize: 9, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.14em", fontFamily: "monospace" }}>
-                        Agents
-                      </span>
-                      <span style={{ fontSize: 10, color: "#475569", fontFamily: "monospace" }}>
-                        {Object.keys(results).length}/{AGENTS.length}
-                      </span>
-                    </div>
-                    {AGENTS.filter(a => results[a.key]).map(agent => {
-                      const result = results[agent.key];
-                      const verdict = result?.verdict || result?.project_viability;
-                      const isActive = active === agent.key;
-                      const vc = VERDICTS[verdict?.toLowerCase()] || VERDICTS.unclear;
-                      return (
-                        <button key={agent.key}
-                          className={`agent-btn${isActive ? " active" : ""}`}
-                          onClick={() => setActive(agent.key)}
-                          style={{ borderLeftColor: isActive ? ACCENT : "transparent" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
-                            <span style={{
-                              width: 6, height: 6, borderRadius: "50%", background: ACCENT, flexShrink: 0,
-                              boxShadow: isActive ? `0 0 8px ${ACCENT}` : "none", transition: "box-shadow 0.2s"
-                            }} />
-                            <span style={{ fontSize: 12, fontWeight: 500, color: isActive ? "#e2e8f0" : "#64748b", transition: "color 0.15s" }}>
-                              {agent.label}
-                            </span>
-                          </div>
-                          {verdict && (
-                            <div style={{ marginLeft: 13 }}>
-                              <span style={{
-                                display: "inline-flex", alignItems: "center", gap: 4,
-                                fontSize: 8, padding: "2px 8px", borderRadius: 999,
-                                background: vc.bg, border: `1px solid ${vc.border}`,
-                                color: vc.color, fontWeight: 700, letterSpacing: "0.08em",
-                                textTransform: "uppercase"
-                              }}>
-                                <span style={{ width: 3, height: 3, borderRadius: "50%", background: vc.color }} />
-                                {vc.label}
-                              </span>
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Main output panel */}
-                  <div style={{
-                    background: "#07070f", border: "1px solid #0f0f1c",
-                    borderRadius: 10, overflow: "hidden", minHeight: 400
-                  }}>
-                    {active ? (() => {
-                      const agent = AGENTS.find(a => a.key === active);
-                      if (!agent) return null;
-                      return (
-                        <>
-                          <div style={{
-                            padding: "14px 22px", borderBottom: "1px solid #0f0f1c",
-                            background: `linear-gradient(135deg,${ACCENT}06,transparent 60%)`,
-                            display: "flex", alignItems: "center", gap: 10
-                          }}>
-                            <div style={{
-                              width: 32, height: 32, borderRadius: "50%",
-                              background: `${ACCENT}10`, border: `1.5px solid ${ACCENT}30`,
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              flexShrink: 0, boxShadow: `0 0 14px ${ACCENT}20`
-                            }}>
-                              <span style={{ width: 9, height: 9, borderRadius: "50%", background: ACCENT, boxShadow: `0 0 10px ${ACCENT}` }} />
-                            </div>
-                            <div>
-                              <div style={{ fontWeight: 700, fontSize: 13, color: "#f1f5f9" }}>{agent.label}</div>
-                              <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>{agent.desc}</div>
-                            </div>
-                          </div>
-                          <div style={{ padding: "22px 26px", maxHeight: 680, overflowY: "auto" }} className="fade-in">
-                            <AgentOutput data={results[active]} />
-                          </div>
-                        </>
-                      );
-                    })() : (
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 300, gap: 8, color: "#1e2035" }}>
-                        <span style={{ fontSize: 24 }}>◌</span>
-                        <span style={{ fontSize: 12 }}>Select an agent from the sidebar</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Done banner */}
-              {isDone && (
+                {/* Main output panel */}
                 <div style={{
-                  marginBottom: 32, padding: "16px 22px",
-                  background: "linear-gradient(135deg,#020d07,#030f08)",
-                  border: "1px solid #16a34a25", borderRadius: 10,
-                  display: "flex", alignItems: "center", gap: 14,
-                  justifyContent: "space-between"
+                  background: "#07070f", border: "1px solid #0f0f1c",
+                  borderRadius: 10, overflow: "hidden", minHeight: 400
                 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{
-                      width: 30, height: 30, borderRadius: "50%",
-                      background: "#052e16", border: "1px solid #16a34a40",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      boxShadow: "0 0 14px rgba(52,211,153,.18)"
-                    }}>
-                      <span style={{ color: "#4ade80", fontSize: 13 }}>✓</span>
+                  {active ? (() => {
+                    const agent = AGENTS.find(a => a.key === active);
+                    if (!agent) return null;
+                    return (
+                      <>
+                        <div style={{
+                          padding: "14px 22px", borderBottom: "1px solid #0f0f1c",
+                          background: `linear-gradient(135deg,${ACCENT}06,transparent 60%)`,
+                          display: "flex", alignItems: "center", gap: 10
+                        }}>
+                          <div style={{
+                            width: 32, height: 32, borderRadius: "50%",
+                            background: `${ACCENT}10`, border: `1.5px solid ${ACCENT}30`,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            flexShrink: 0, boxShadow: `0 0 14px ${ACCENT}20`
+                          }}>
+                            <span style={{ width: 9, height: 9, borderRadius: "50%", background: ACCENT, boxShadow: `0 0 10px ${ACCENT}` }} />
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: 13, color: "#f1f5f9" }}>{agent.label}</div>
+                            <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>{agent.desc}</div>
+                          </div>
+                        </div>
+                        <div style={{ padding: "22px 26px", maxHeight: 680, overflowY: "auto" }} className="fade-in">
+                          <AgentOutput data={results[active]} />
+                        </div>
+                      </>
+                    );
+                  })() : (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 300, gap: 8, color: "#1e2035" }}>
+                      <span style={{ fontSize: 24 }}>◌</span>
+                      <span style={{ fontSize: 12 }}>Select an agent from the sidebar</span>
                     </div>
-                    <div>
-                      <p style={{ fontSize: 12, fontWeight: 600, color: "#4ade80" }}>Specification generated & saved</p>
-                      <p style={{ fontSize: 10, color: "#4ade8050", marginTop: 2, fontFamily: "monospace" }}>All 6 agents completed successfully</p>
-                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Done banner */}
+            {isDone && (
+              <div style={{
+                marginBottom: 32, padding: "16px 22px",
+                background: "linear-gradient(135deg,#020d07,#030f08)",
+                border: "1px solid #16a34a25", borderRadius: 10,
+                display: "flex", alignItems: "center", gap: 14,
+                justifyContent: "space-between"
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{
+                    width: 30, height: 30, borderRadius: "50%",
+                    background: "#052e16", border: "1px solid #16a34a40",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    boxShadow: "0 0 14px rgba(52,211,153,.18)"
+                  }}>
+                    <span style={{ color: "#4ade80", fontSize: 13 }}>✓</span>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 12, fontWeight: 600, color: "#4ade80" }}>Specification generated & saved</p>
+                    <p style={{ fontSize: 10, color: "#4ade8050", marginTop: 2, fontFamily: "monospace" }}>All 6 agents completed successfully</p>
                   </div>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
+        )}
 
-          {/* Feature cards — shown only when idle */}
-          {isIdle && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, paddingBottom: 60 }} className="fade-in feature-grid">
-              {[
-                { icon: "◈", title: "Multi-Agent Analysis", desc: "6 specialized agents each contribute a distinct perspective. Business, tech, QA, security, UX, and final spec — all synthesized.", tags: ["BA", "Dev", "QA", "Sec", "UX"] },
-                { icon: "⬡", title: "RAG-Grounded", desc: "Agents retrieve from GDPR, OWASP, and SaaS architecture docs before responding — grounded in real standards, not just training data.", tags: ["GDPR", "OWASP", "SaaS"] },
-                { icon: "◆", title: "Production SRS Output", desc: "The Orchestrator synthesizes into MVP scope, functional requirements, security requirements, and launch risks ready for your team.", tags: ["SRS", "MVP", "Risks"] },
-              ].map((card, i) => (
-                <div key={i} style={{ padding: "18px 20px", background: "#07070f", border: "1px solid #0f0f1c", borderRadius: 10 }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
-                    <span style={{ fontSize: 18, color: ACCENT, textShadow: `0 0 18px ${ACCENT}60` }}>{card.icon}</span>
-                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                      {card.tags.map(t => (
-                        <span key={t} style={{
-                          fontSize: 7, padding: "2px 6px", background: `${ACCENT}0d`,
-                          border: `1px solid ${ACCENT}20`, color: ACCENT,
-                          borderRadius: 4, fontFamily: "monospace", letterSpacing: "0.06em"
-                        }}>{t}</span>
-                      ))}
-                    </div>
+        {/* Feature cards — shown only when idle */}
+        {isIdle && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, paddingBottom: 60 }} className="fade-in feature-grid">
+            {[
+              { icon: "◈", title: "Multi-Agent Analysis", desc: "6 specialized agents each contribute a distinct perspective. Business, tech, QA, security, UX, and final spec — all synthesized.", tags: ["BA", "Dev", "QA", "Sec", "UX"] },
+              { icon: "⬡", title: "RAG-Grounded", desc: "Agents retrieve from GDPR, OWASP, and SaaS architecture docs before responding — grounded in real standards, not just training data.", tags: ["GDPR", "OWASP", "SaaS"] },
+              { icon: "◆", title: "Production SRS Output", desc: "The Orchestrator synthesizes into MVP scope, functional requirements, security requirements, and launch risks ready for your team.", tags: ["SRS", "MVP", "Risks"] },
+            ].map((card, i) => (
+              <div key={i} style={{ padding: "18px 20px", background: "#07070f", border: "1px solid #0f0f1c", borderRadius: 10 }}>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
+                  <span style={{ fontSize: 18, color: ACCENT, textShadow: `0 0 18px ${ACCENT}60` }}>{card.icon}</span>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    {card.tags.map(t => (
+                      <span key={t} style={{
+                        fontSize: 7, padding: "2px 6px", background: `${ACCENT}0d`,
+                        border: `1px solid ${ACCENT}20`, color: ACCENT,
+                        borderRadius: 4, fontFamily: "monospace", letterSpacing: "0.06em"
+                      }}>{t}</span>
+                    ))}
                   </div>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: "#e2e8f0", marginBottom: 8 }}>{card.title}</div>
-                  <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.65 }}>{card.desc}</div>
                 </div>
-              ))}
-            </div>
-          )}
+                <div style={{ fontWeight: 700, fontSize: 13, color: "#e2e8f0", marginBottom: 8 }}>{card.title}</div>
+                <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.65 }}>{card.desc}</div>
+              </div>
+            ))}
+          </div>
+        )}
 
-        </div>
       </div>
+    </div >
     </>
   );
 }

@@ -4,7 +4,8 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
-from pydantic import BaseModel
+from fastapi.exceptions import RequestValidationError
+from pydantic import BaseModel, field_validator
 from dotenv import load_dotenv
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -57,8 +58,39 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     )
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_handler(request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    msg = errors[0].get("msg", "Invalid request.") if errors else "Invalid request."
+    return JSONResponse(status_code=422, content={"error": msg.replace("Value error, ", "")})
+
+
+GEMINI_KEY_HINT = (
+    "That doesn't look like a Google Gemini API key. Keys start with 'AIza' — "
+    "get one free at https://aistudio.google.com/apikey"
+)
+
+
 class IdeaRequest(BaseModel):
     idea: str
+    # Bring-your-own-key: must be a Google Gemini (AI Studio) key, since every
+    # agent talks to Google's API via google-genai. Any other provider's key
+    # would only fail later at request time.
+    api_key: str | None = None
+
+    @field_validator("api_key", mode="before")
+    @classmethod
+    def _clean_api_key(cls, v):
+        if v is None:
+            return None
+        v = str(v).strip()
+        if not v:
+            return None
+        if not v.startswith("AIza") or len(v) < 30:
+            raise ValueError(GEMINI_KEY_HINT)
+        return v
+
+
 
 
 @app.api_route("/", methods=["GET", "HEAD"])
@@ -71,6 +103,7 @@ def root():
 async def generate_spec(request: Request, body: IdeaRequest):
     result = spec_pipeline.invoke({
         "idea": body.idea,
+        "api_key": body.api_key,
         "business_analysis": None,
         "dev_concerns": None,
         "qa_concerns": None,
@@ -78,7 +111,6 @@ async def generate_spec(request: Request, body: IdeaRequest):
         "ux_concerns": None,
         "final_spec": None
     })
-
     project_id = save_project(
         user_id="anonymous",
         title=body.idea[:80],
@@ -105,6 +137,7 @@ async def generate_spec_stream(request: Request, body: IdeaRequest):
     async def event_generator():
         state = {
             "idea": body.idea,
+            "api_key": body.api_key,
             "business_analysis": None,
             "dev_concerns": None,
             "qa_concerns": None,
@@ -112,7 +145,6 @@ async def generate_spec_stream(request: Request, body: IdeaRequest):
             "ux_concerns": None,
             "final_spec": None
         }
-
         agents = [
             ("business",     business_analyst_node, "business_analysis"),
             ("developer",    developer_node,        "dev_concerns"),
