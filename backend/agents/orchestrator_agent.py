@@ -128,11 +128,14 @@ def generate_analysis(client: genai.Client, user_message: str) -> Dict[str, Any]
                     system_instruction=SYSTEM_PROMPT,
                     temperature=0,
                     max_output_tokens=8000,
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
                 )
             )
 
             latency = round(time.time() - start_time, 2)
-            raw_text = response.text.strip()
+            raw_text = (response.text or "").strip()
+            if not raw_text:
+                raise ValueError("Empty model response (truncated or safety-blocked)")
             logger.info(f"RAW RESPONSE:\n{raw_text}")
             validated = validate_response(raw_text)
             validated["_meta"] = {"latency_seconds": latency, "model": MODEL_NAME}
