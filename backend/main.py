@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,6 +24,10 @@ from backend.database.db import save_project, save_specification
 from backend.rag.setup import setup_vector_store
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
+
+# Seconds to wait between agents so a single run stays under Gemini's free-tier
+# per-minute request cap (as low as 5 RPM). Set to 0 on a paid key.
+AGENT_DELAY_SECONDS = float(os.getenv("AGENT_DELAY_SECONDS", "13"))
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -161,9 +166,11 @@ async def generate_spec_stream(request: Request, body: IdeaRequest):
             ("orchestrator", orchestrator_node,     "final_spec"),
         ]
 
-        for agent_name, agent_fn, output_key in agents:
+        for i, (agent_name, agent_fn, output_key) in enumerate(agents):
+            if i > 0 and AGENT_DELAY_SECONDS > 0:
+                await asyncio.sleep(AGENT_DELAY_SECONDS)
             yield f"data: {json.dumps({'type': 'status', 'agent': agent_name, 'status': 'running'})}\n\n"
-            state = agent_fn(state)
+            state = await asyncio.to_thread(agent_fn, state)
             output = state.get(output_key)
             yield f"data: {json.dumps({'type': 'result', 'agent': agent_name, 'data': output})}\n\n"
 

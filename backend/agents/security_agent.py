@@ -1,5 +1,6 @@
 from google import genai
 from google.genai import types
+from google.genai import errors as genai_errors
 import os
 import json
 import time
@@ -103,6 +104,12 @@ def generate_analysis(client: genai.Client, user_message: str) -> Dict[str, Any]
             validated["_meta"] = {"latency_seconds": latency, "model": MODEL_NAME}
             return validated
 
+        except genai_errors.APIError as e:
+            code = getattr(e, "code", None)
+            last_error = f"Gemini API error {code}: {e}"
+            logger.warning(f"Attempt {attempt} hit API error: {last_error}")
+            if attempt < MAX_RETRIES:
+                time.sleep(30 * attempt if code == 429 else RETRY_DELAY * attempt)
         except (ValidationError, ValueError, json.JSONDecodeError) as e:
             last_error = str(e)
             logger.warning(f"Attempt {attempt} failed: {last_error}")

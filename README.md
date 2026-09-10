@@ -138,5 +138,8 @@ App runs at `http://localhost:3000`.
 
 - You must supply your own Gemini API key for every analysis — nothing runs on a shared key
 - Rate limited to 3 spec generations per hour per IP
-- Gemini's free tier has daily/per-minute quotas — heavy use on one key may hit `429` errors
+- A free-tier Gemini key is very limited (as low as 5 requests/min and 20/day). One
+  analysis = 6 calls, so a free key is good for ~3 runs/day. The pipeline paces
+  agents ~13s apart (`AGENT_DELAY_SECONDS`) to stay under the per-minute cap, which
+  makes a run take ~90s. A paid key removes both problems — set `AGENT_DELAY_SECONDS=0`.
 - Render's free tier sleeps after ~15 min idle; the next request takes 30-60s to wake up and rebuilds the RAG vector store from scratch on that cold start
